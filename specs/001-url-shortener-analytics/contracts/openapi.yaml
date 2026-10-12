@@ -1,0 +1,268 @@
+openapi: 3.0.3
+info:
+  title: URL Shortener with Analytics
+  version: 1.0.0
+  description: >
+    Anonymous URL shortener. All endpoints are public. Timestamps are UTC strings
+    formatted YYYY-MM-DDTHH:mm:ssZ. Every error body is {"detail": "<message>"}.
+    Served interactively by NestJS at /docs.
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/shorten:
+    post:
+      summary: Create a short link, or renew the active one for the same URL
+      description: >
+        The submitted url is trimmed of surrounding whitespace and otherwise compared as an exact
+        string. If an active link exists for it, that link is renewed (expires_at = now + 24h, code,
+        created_at and analytics unchanged) and 200 is returned. Otherwise a new link with a new code
+        is created and 201 is returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShortenRequest'
+      responses:
+        '201':
+          description: New short link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortenResponse'
+              example:
+                short_code: Ab3xY9z
+                short_url: http://localhost:8000/r/Ab3xY9z
+                original_url: https://example.com/article
+                created_at: '2026-10-12T10:00:00Z'
+                expires_at: '2026-10-13T10:00:00Z'
+                reused: false
+        '200':
+          description: Active link reused and its expiration renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortenResponse'
+              example:
+                short_code: Ab3xY9z
+                short_url: http://localhost:8000/r/Ab3xY9z
+                original_url: https://example.com/article
+                created_at: '2026-10-12T10:00:00Z'
+                expires_at: '2026-10-13T18:00:00Z'
+                reused: true
+        '422':
+          description: >
+            Invalid input: missing/empty/non-string url, scheme other than http/https, no valid
+            hostname, or longer than 2048 characters (after trimming).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: url must be a valid http or https URL
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /r/{shortCode}:
+    get:
+      summary: Redirect to the original URL and record one click
+      description: >
+        Does not renew expiration. Sent with Cache-Control no-store. Only a successful redirect counts
+        as a click. A code that is not exactly 7 letters/digits is treated as unknown (404).
+      parameters:
+        - $ref: '#/components/parameters/ShortCode'
+      responses:
+        '302':
+          description: Redirect to the original URL
+          headers:
+            Location:
+              description: The stored original URL
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+        '404':
+          description: Unknown or malformed short code (no click recorded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: Short URL not found
+        '410':
+          description: Short link expired (no redirect, no click recorded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: This shortened URL has expired
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/links/{shortCode}/analytics:
+    get:
+      summary: Aggregate analytics for a short link
+      description: >
+        Public, read-only; never renews expiration. total_clicks covers all clicks since creation,
+        including before renewals. clicks_by_hour has exactly 24 entries in ascending order: the
+        current UTC hour and the preceding 23, with 0 for hours without clicks.
+      parameters:
+        - $ref: '#/components/parameters/ShortCode'
+      responses:
+        '200':
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+              example:
+                short_code: Ab3xY9z
+                original_url: https://example.com/article
+                short_url: http://localhost:8000/r/Ab3xY9z
+                created_at: '2026-10-12T10:00:00Z'
+                expires_at: '2026-10-13T18:00:00Z'
+                total_clicks: 15
+                last_clicked_at: '2026-10-12T14:30:00Z'
+                clicks_by_hour:
+                  - { hour: '2026-10-11T15:00:00Z', clicks: 0 }
+                  - { hour: '2026-10-12T13:00:00Z', clicks: 5 }
+                  - { hour: '2026-10-12T14:00:00Z', clicks: 10 }
+                # abbreviated: the real response always lists all 24 buckets
+        '404':
+          description: Unknown or malformed short code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: Short URL not found
+        '410':
+          description: Short link expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: This shortened URL has expired
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+components:
+  parameters:
+    ShortCode:
+      name: shortCode
+      in: path
+      required: true
+      description: 7-character code of letters and digits
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9]{7}$'
+        example: Ab3xY9z
+  responses:
+    InternalError:
+      description: Unexpected failure (no internal details exposed)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: Internal server error
+  schemas:
+    ShortenRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          maxLength: 2048
+          description: http or https URL with a hostname; surrounding whitespace is trimmed
+          example: https://example.com/article
+    ShortenResponse:
+      type: object
+      required: [short_code, short_url, original_url, created_at, expires_at, reused]
+      properties:
+        short_code:
+          type: string
+          pattern: '^[A-Za-z0-9]{7}$'
+        short_url:
+          type: string
+          description: PUBLIC_BASE_URL + /r/ + short_code (points at the NestJS server, not Vite)
+        original_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        reused:
+          type: boolean
+    HourBucket:
+      type: object
+      required: [hour, clicks]
+      properties:
+        hour:
+          type: string
+          format: date-time
+          description: Start of the UTC hour, e.g. 2026-10-12T13:00:00Z
+        clicks:
+          type: integer
+          minimum: 0
+    AnalyticsResponse:
+      type: object
+      required:
+        - short_code
+        - original_url
+        - short_url
+        - created_at
+        - expires_at
+        - total_clicks
+        - last_clicked_at
+        - clicks_by_hour
+      properties:
+        short_code:
+          type: string
+        original_url:
+          type: string
+        short_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        total_clicks:
+          type: integer
+          minimum: 0
+        last_clicked_at:
+          type: string
+          format: date-time
+          nullable: true
+        clicks_by_hour:
+          type: array
+          minItems: 24
+          maxItems: 24
+          items:
+            $ref: '#/components/schemas/HourBucket'
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string

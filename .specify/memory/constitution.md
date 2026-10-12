@@ -1,10 +1,29 @@
+<!--
+Sync Impact Report (temporary; remove before committing)
+Version change: 1.0.0 -> 1.1.0
+Modified principles:
+  - I. Simplicity and a Fixed Stack: clarified that "only" governs the runtime stack; dev-only
+    test tooling is permitted solely as defined in "Development Workflow and Quality Gates".
+Modified sections:
+  - Development Workflow and Quality Gates: Testing bullet expanded (React Testing Library/jsdom for
+    frontend integration tests; Playwright end-to-end package with its own dev-only constraints);
+    Definition of Done now also requires the 15-step flow to pass as an automated real-browser test.
+Added sections: none
+Removed sections: none
+Follow-up TODOs (not done by this command):
+  - tasks.md: T077 (propose this amendment) is now satisfied; remove or mark done, and move
+    Playwright dev-only tooling off the "deviation" list in plan.md Complexity Tracking.
+  - plan.md Constitution Check: change "PASS with justified addition" to plain PASS.
+Migration note: no existing code is affected (implementation has not started).
+-->
 # URL Shortener with Analytics Constitution
 
 ## Core Principles
 
 ### I. Simplicity and a Fixed Stack (NON-NEGOTIABLE)
-The application MUST be built with React, Vite, NestJS (Express adapter) and SQLite only.
-Redis, BullMQ, Kafka, Docker orchestration, microservices, authentication, background workers,
+The application's runtime stack MUST be React, Vite, NestJS (Express adapter) and SQLite only.
+Dev-only test tooling is not part of the runtime stack and is permitted only as listed under
+"Development Workflow and Quality Gates". Redis, BullMQ, Kafka, Docker orchestration, microservices, authentication, background workers,
 scheduled jobs, external analytics services and distributed caching MUST NOT be introduced. No ORM
 and no frontend state-management library (e.g. Redux) is allowed; SQLite is accessed directly via
 better-sqlite3 and React local state is sufficient. Features listed as out of scope in plan.md
@@ -79,16 +98,24 @@ Rationale: a stable, documented contract lets frontend, tests and docs stay in a
 
 ## Development Workflow and Quality Gates
 
-- Testing: Jest with @nestjs/testing and Supertest for backend unit and API tests; Vitest for basic
-  frontend tests. Concurrency rules (NFR-01–NFR-03), TTL renewal, expiry/recreation and error
-  statuses MUST be covered by automated tests. Tests for a behavior SHOULD be written before or with
-  the implementation, never after merge.
+- Testing: Jest with @nestjs/testing and Supertest for backend unit and API tests; Vitest for
+  frontend unit tests, with React Testing Library, jsdom, user-event and jest-dom allowed for
+  frontend integration tests; Playwright (Chromium) for browser end-to-end tests. Concurrency
+  rules (NFR-01–NFR-03), TTL renewal, expiry/recreation and error statuses MUST be covered by
+  automated tests. Tests for a behavior SHOULD be written before or with the implementation, never
+  after merge.
+- Dev-only test tooling: Playwright and its helpers (TypeScript, better-sqlite3 for test set-up)
+  MUST live in a separate `e2e/` package, MUST NOT be imported by application code or included in
+  any build, and MUST run against a throwaway database, never `data/shortener.db`. Test helpers
+  that change data (for example forcing expiry) MUST NOT be added to product code or exposed as
+  endpoints. Any other test or build dependency still requires a justified, approved deviation.
 - Frontend: the landing page and analytics page MUST be responsive, show loading states, and handle
   empty input, invalid URLs, network failures, reused URLs, missing and expired analytics, and copy
   failures. Copy MUST give a success notification without reloading. Charts use simple React/CSS; no
   charting library. The analytics page has a manual Refresh button; no polling.
 - Definition of Done: the 15-step end-to-end user flow in plan.md §18 passes, including preserved
-  analytics after renewal and a brand-new code after expiry.
+  analytics after renewal and a brand-new code after expiry, and the same flow passes as an
+  automated real-browser test.
 - Every spec, plan and task set MUST be checked against this constitution before implementation.
 - Development runs as two processes (Vite and NestJS); a production build integration is optional.
 
@@ -106,4 +133,4 @@ amending one of the two documents, never by silently ignoring either.
   as added complexity or a new dependency, MUST be justified in writing and approved before merge.
 - Runtime guidance: use plan.md until a README or agent guidance file is added.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-10-12
+**Version**: 1.1.0 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-10-12
