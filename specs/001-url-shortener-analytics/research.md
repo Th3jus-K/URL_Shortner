@@ -37,13 +37,13 @@ clarifications they resolve.
 
 ## R6. Redirect caching
 
-- **Decision**: Respond `302` with `Cache-Control: no-store`.
+- **Decision**: Respond `302` via Express `res.redirect` (which percent-encodes non-ASCII characters in `Location`) with `Cache-Control: no-store`.
 - **Rationale**: Browsers must hit the server each visit or repeat visits would not be counted (FR-019). Express's 302 is not normally cached, but the header removes any ambiguity.
 - **Alternatives considered**: 301 (rejected: permanent, cacheable, breaks counting and expiry).
 
 ## R7. URL validation (422)
 
-- **Decision**: DTO field `url` with a `@Transform` that trims strings, then validators: required/non-empty string, `@MaxLength(2048)` (applied after trim), and a custom constraint that (a) matches `^https?://[^/?#\\]` case-insensitively on the raw string, (b) parses with WHATWG `new URL()` and requires `protocol` ∈ {`http:`, `https:`} and non-empty `hostname`. The stored value is the trimmed original string, **not** the parsed/normalized form. `ValidationPipe({ transform: true, whitelist: true, errorHttpStatusCode: 422 })` with an `exceptionFactory` returning an `UnprocessableEntityException` whose message is the first constraint message.
+- **Decision**: DTO field `url` with a `@Transform` that trims strings, then validators: required/non-empty string, `@MaxLength(2048)` (applied after trim), and a custom constraint that (a) matches `^https?://[^/?#\\]` case-insensitively on the raw string, (b) contains no whitespace or control characters (non-ASCII is allowed and stored verbatim), and (c) parses with WHATWG `new URL()` and requires `protocol` ∈ {`http:`, `https:`} and non-empty `hostname`. The stored value is the trimmed original string, **not** the parsed/normalized form. `ValidationPipe({ transform: true, whitelist: true, errorHttpStatusCode: 422 })` with an `exceptionFactory` returning an `UnprocessableEntityException` whose message is the first constraint message.
 - **Rationale**: Rejects `javascript:`, `ftp:`, empty and hostless values (FR-006). The regex guard is needed because the WHATWG parser is lenient (`http:///path` parses with hostname `path`, `http:example.com` is accepted) and BR-06 forbids silently rewriting URLs. 2048 accepted / 2049 rejected after trimming (Edge Cases). Missing or non-string `url` also yields 422.
 - **Alternatives considered**: `@IsUrl` from class-validator (rejected: accepts schemeless/other protocols by default and its options are harder to align with the exact rules); regex-only validation (rejected: error-prone for hostnames).
 - **Known framework behaviour**: A syntactically malformed JSON body is rejected by Express's body parser with 400 before validation runs; this is outside the documented contract and is surfaced as `{"detail": "Malformed request body"}` by the exception filter.
@@ -75,7 +75,7 @@ clarifications they resolve.
 
 ## R12. Configuration
 
-- **Decision**: Read `PUBLIC_BASE_URL` (default `http://localhost:8000`) and `DATABASE_PATH` (default `../data/shortener.db`, resolved relative to `backend/`) from `process.env`, with `backend/.env.example` documenting them; strip any trailing `/` from the base URL when building `${base}/r/${code}`. Port 8000 is fixed in `main.ts`. No config library is added.
+- **Decision**: Read `PUBLIC_BASE_URL` (default `http://localhost:9010`) and `DATABASE_PATH` (default `../data/shortener.db`, resolved relative to `backend/`) from `process.env`, with `backend/.env.example` documenting them; strip any trailing `/` from the base URL when building `${base}/r/${code}`. Port 9010 is fixed in `main.ts`. No config library is added.
 - **Rationale**: Two settings do not justify `@nestjs/config`; fewer dependencies per constitution I.
 - **Alternatives considered**: `@nestjs/config` (rejected: extra dependency for two variables).
 
@@ -108,14 +108,14 @@ clarifications they resolve.
 
 ## R17. End-to-end tests (Playwright)
 
-- **Decision**: A separate dev-only package `e2e/` using `@playwright/test` with Chromium. `playwright.config.ts` uses `webServer` to start the NestJS backend (`PORT` 8000, `DATABASE_PATH=e2e/.tmp/e2e.db`, `PUBLIC_BASE_URL=http://localhost:8000`) and the Vite dev server (5173, proxy to 8000) and waits on `/health` and `/`; `reuseExistingServer` is false so tests never run against a developer's own data. `global-setup.ts` deletes the e2e database (and its `-wal`/`-shm` files) first. Two projects: desktop (1280×800) and mobile (375×667). Specs:
-  - `definition-of-done.spec.ts` — the 15 steps of plan.md §18 in one serial test: shorten, copy, visit the short URL (via Playwright's request API, asserting 302 and `Location` without following), open analytics via **View Analytics** and assert the URL is on `localhost:5173`, resubmit → same code and `reused` note, analytics preserved after Refresh, force expiry via `support/db.ts`, assert 410 and the expired page, resubmit → different code, zero clicks, old code still 410.
+- **Decision**: A separate dev-only package `e2e/` using `@playwright/test` with Chromium. `playwright.config.ts` uses `webServer` to start the NestJS backend (`PORT` 9010, `DATABASE_PATH=e2e/.tmp/e2e.db`, `PUBLIC_BASE_URL=http://localhost:9010`) and the Vite dev server (9011, proxy to 9010) and waits on `/health` and `/`; `reuseExistingServer` is false so tests never run against a developer's own data. `reset-db.js`, run by the backend webServer command before the server starts (a globalSetup would run after the servers, too late), deletes the e2e database (and its `-wal`/`-shm` files) first. Two projects: desktop (1280×800) and mobile (375×667). Specs:
+  - `definition-of-done.spec.ts` — the 15 steps of plan.md §18 in one serial test: shorten, copy, visit the short URL (via Playwright's request API, asserting 302 and `Location` without following), open analytics via **View Analytics** and assert the URL is on `localhost:9011`, resubmit → same code and `reused` note, analytics preserved after Refresh, force expiry via `support/db.ts`, assert 410 and the expired page, resubmit → different code, zero clicks, old code still 410.
   - `validation-and-errors.spec.ts` — empty, `javascript:`, `ftp:`, hostless and 2049-character input show inline errors and create no row; unknown code and expired code on the analytics page; network failure by aborting the `/api/shorten` route.
   - `copy.spec.ts` — clipboard-read/write granted: success toast and clipboard content equals the short URL without a reload; clipboard denied: failure toast and the URL stays selectable.
   - `analytics.spec.ts` — exactly 24 bars, current-hour bar holds recent clicks, Refresh updates counts with no background requests between refreshes, times rendered in the browser context's `timezoneId` (set to a non-UTC zone), never-clicked link shows zero/none.
   - `responsive.spec.ts` — both pages have no horizontal overflow at 375 px and 1280 px and key controls are visible and usable.
-- **Rationale**: Only a real browser can verify clipboard behaviour, browser-local timezone display, the frontend (5173) vs backend (8000) origins of links and routes, the Vite proxy, and responsive layout (SC-010, SC-011, FR-026, FR-029, FR-030). A throwaway DB plus direct row edits makes expiry deterministic without product changes.
+- **Rationale**: Only a real browser can verify clipboard behaviour, browser-local timezone display, the frontend (9011) vs backend (9010) origins of links and routes, the Vite proxy, and responsive layout (SC-010, SC-011, FR-026, FR-029, FR-030). A throwaway DB plus direct row edits makes expiry deterministic without product changes.
 - **Alternatives considered**: Cypress (rejected: heavier, no added capability); Vitest/jsdom only (rejected: cannot check clipboard, timezone, layout or real proxying); a backend-only script for the 15 steps (rejected: skips the UI half of the Definition of Done).
-- **Notes**: Tests in `definition-of-done.spec.ts` are `serial`; other specs use unique URLs per test so they can share one database. Ports 5173 and 8000 must be free. Browsers are installed once with `npx playwright install chromium`. Playwright is a dev-only dependency documented in the plan's Complexity Tracking; the runtime stack is unchanged.
+- **Notes**: Tests in `definition-of-done.spec.ts` are `serial`; other specs use unique URLs per test so they can share one database. Ports 9011 and 9010 must be free. Browsers are installed once with `npx playwright install chromium`. Playwright is a dev-only dependency documented in the plan's Complexity Tracking; the runtime stack is unchanged.
 
 **Result**: All Technical Context fields are resolved; no `NEEDS CLARIFICATION` remain.

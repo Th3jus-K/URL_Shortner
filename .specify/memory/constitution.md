@@ -1,6 +1,13 @@
 <!--
 Sync Impact Report (temporary; remove before committing)
-Version change: 1.0.0 -> 1.1.0
+Version change: 1.1.0 -> 1.2.0
+Amendment 1.2.0: development ports changed by the project owner from 5173 (Vite) / 8000 (NestJS) to
+9011 (Vite) / 9010 (NestJS) because 5173 and 8000 are occupied on the shared development machine.
+Modified section: Technology and Security Constraints (Architecture, analytics-link example).
+Migration note: backend/src/main.ts, frontend/vite.config.js, backend/.env.example, e2e config, tests and
+specs/001-url-shortener-analytics/* were updated together; any existing .env must set
+PUBLIC_BASE_URL=http://localhost:9010.
+--- earlier amendment (1.0.0 -> 1.1.0) ---
 Modified principles:
   - I. Simplicity and a Fixed Stack: clarified that "only" governs the runtime stack; dev-only
     test tooling is permitted solely as defined in "Development Workflow and Quality Gates".
@@ -80,10 +87,10 @@ Rationale: a stable, documented contract lets frontend, tests and docs stay in a
 - Backend: Node.js 22+, TypeScript, NestJS, class-validator/class-transformer, better-sqlite3,
   Node.js crypto, @nestjs/swagger. Frontend: React, Vite, JavaScript (JSX), CSS, Fetch API, React
   Router. Database: one SQLite file at `data/shortener.db`.
-- Architecture: browser → React/Vite (port 5173) → NestJS (port 8000) → SQLite. The frontend MUST
+- Architecture: browser → React/Vite (port 9011) → NestJS (port 9010) → SQLite. The frontend MUST
   NEVER access SQLite directly. Vite MUST proxy `/api` to NestJS in development.
 - Short URLs MUST be built from `PUBLIC_BASE_URL` and point at NestJS, not Vite. Analytics
-  navigation links MUST use the frontend's own origin (e.g. `http://localhost:5173/stats/Ab3xY9z`).
+  navigation links MUST use the frontend's own origin (e.g. `http://localhost:9011/stats/Ab3xY9z`).
   Configuration comes from `PUBLIC_BASE_URL` and `DATABASE_PATH`.
 - Schema: `links` and `click_events` tables as specified in plan.md, with indexes UNIQUE(short_code),
   (original_url, expires_at) and (link_id, clicked_at).
@@ -133,4 +140,4 @@ amending one of the two documents, never by silently ignoring either.
   as added complexity or a new dependency, MUST be justified in writing and approved before merge.
 - Runtime guidance: use plan.md until a README or agent guidance file is added.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-10-12
+**Version**: 1.2.0 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-10-12

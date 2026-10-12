@@ -138,7 +138,7 @@ are required.
 
        React + Vite
 
-       (Port 5173)
+       (Port 9011)
 
               |
 
@@ -148,7 +148,7 @@ are required.
 
           NestJS
 
-         (Port 8000)
+         (Port 9010)
 
               |
 
@@ -542,7 +542,7 @@ Ab3xY9z
 
 Short URL:
 
-http\://localhost:8000/r/Ab3xY9z
+http\://localhost:9010/r/Ab3xY9z
 
 
 
@@ -566,7 +566,7 @@ HTTP 201 Created
 
   "short_code": "Ab3xY9z",
 
-  "short_url": "http\://localhost:8000/r/Ab3xY9z",
+  "short_url": "http\://localhost:9010/r/Ab3xY9z",
 
   "original_url": "https\://example.com/article",
 
@@ -592,7 +592,7 @@ HTTP 200 OK
 
   "short_code": "Ab3xY9z",
 
-  "short_url": "http\://localhost:8000/r/Ab3xY9z",
+  "short_url": "http\://localhost:9010/r/Ab3xY9z",
 
   "original_url": "https\://example.com/article",
 
@@ -806,7 +806,7 @@ Response:
 
   "original_url": "https\://example.com/article",
 
-  "short_url": "http\://localhost:8000/r/Ab3xY9z",
+  "short_url": "http\://localhost:9010/r/Ab3xY9z",
 
   "created_at": "2026-10-12T10:00:00Z",
 
@@ -1452,7 +1452,7 @@ Your Short URL:
 
 
 
-http\://localhost:8000/r/Ab3xY9z
+http\://localhost:9010/r/Ab3xY9z
 
 
 
@@ -1500,7 +1500,7 @@ Requirements:
 
 Short URL:
 
-http\://localhost:8000/r/Ab3xY9z
+http\://localhost:9010/r/Ab3xY9z
 
 
 
@@ -1562,11 +1562,11 @@ Default URL:
 
 
 
-http\://localhost:8000
+http\://localhost:9010
 
 
 
-Configure NestJS to listen on port 8000.
+Configure NestJS to listen on port 9010.
 
 
 
@@ -1574,7 +1574,7 @@ Configuration:
 
 
 
-PUBLIC_BASE_URL=http\://localhost:8000
+PUBLIC_BASE_URL=http\://localhost:9010
 
 DATABASE_PATH=../data/shortener.db
 
@@ -1588,7 +1588,7 @@ Default URL:
 
 
 
-http\://localhost:5173
+http\://localhost:9011
 
 
 
@@ -1596,7 +1596,7 @@ Vite shall proxy:
 
 
 
-/api -> http\://localhost:8000
+/api -> http\://localhost:9010
 
 
 
@@ -1616,13 +1616,13 @@ Example:
 
 
 
-http\://localhost:5173/stats/Ab3xY9z
+http\://localhost:9011/stats/Ab3xY9z
 
 
 
 Do not accidentally direct users to
 
-http\://localhost:8000/stats/Ab3xY9z
+http\://localhost:9010/stats/Ab3xY9z
 
 during development.
 

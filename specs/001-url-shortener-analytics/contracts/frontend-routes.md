@@ -1,7 +1,7 @@
 # Frontend Contract: Routes, States and Navigation
 
-Served by Vite at `http://localhost:5173`. The browser only calls relative `/api/...` URLs, which Vite
-proxies to `http://localhost:8000`. See [openapi.yaml](openapi.yaml) for payloads.
+Served by Vite at `http://localhost:9011`. The browser only calls relative `/api/...` URLs, which Vite
+proxies to `http://localhost:9010`. See [openapi.yaml](openapi.yaml) for payloads.
 
 ## Routes
 
@@ -14,8 +14,8 @@ Any other path shows a simple "page not found" view with a link back to `/`.
 
 ## Link rules
 
-- The short URL displayed and copied is exactly `short_url` from the API (built from `PUBLIC_BASE_URL`; points at NestJS on port 8000).
-- "View Analytics" navigates in-app to `/stats/<short_code>` with a router link, so it always uses the frontend's own origin (e.g. `http://localhost:5173/stats/Ab3xY9z`) and never `:8000`.
+- The short URL displayed and copied is exactly `short_url` from the API (built from `PUBLIC_BASE_URL`; points at NestJS on port 9010).
+- "View Analytics" navigates in-app to `/stats/<short_code>` with a router link, so it always uses the frontend's own origin (e.g. `http://localhost:9011/stats/Ab3xY9z`) and never `:9010`.
 - The Analytics page shows the short URL as text and must not link it to `/stats/...` on the backend.
 
 ## Landing page (`/`)

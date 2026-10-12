@@ -1,2 +1,15 @@
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Runtime data and dependencies
+data/
+node_modules/
+dist/
+
+# End-to-end test artefacts (dev-only)
+e2e/.tmp/
+e2e/test-results/
+e2e/playwright-report/
+
+# Local environment files
+.env

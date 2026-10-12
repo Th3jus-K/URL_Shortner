@@ -6,8 +6,8 @@
 
 ## Summary
 
-Build an anonymous URL shortener with per-link click analytics. A NestJS API (port 8000) owns all business
-logic and talks directly to one SQLite file through better-sqlite3 (no ORM). A React + Vite SPA (port 5173)
+Build an anonymous URL shortener with per-link click analytics. A NestJS API (port 9010) owns all business
+logic and talks directly to one SQLite file through better-sqlite3 (no ORM). A React + Vite SPA (port 9011)
 provides the landing page and the `/stats/:shortCode` analytics page and reaches the API through a Vite
 `/api` proxy. The technical core is correctness under concurrency: shortening runs in a single
 `BEGIN IMMEDIATE` transaction (find active record → renew or insert), and every redirect inserts a click
@@ -48,9 +48,9 @@ No `NEEDS CLARIFICATION` items remain; all were resolved in [research.md](resear
 | III. Transactional integrity and concurrency safety | PASS | `shorten` and `recordClick` each run in one `db.transaction(...).immediate()`; one consistent `now` per transaction; renewal re-checks active and uses `MAX(expires_at, new)`; atomic `total_clicks + 1`; WAL + `busy_timeout` + `foreign_keys`; single synchronous connection closed on shutdown; UNIQUE-collision retry. |
 | IV. Lifecycle rules authoritative | PASS | Active = `expires_at > now`; renew keeps `created_at`; expired ⇒ new row/new code; no UNIQUE on `original_url`; trimmed-string comparison only; 7-char codes via `crypto.randomInt`. |
 | V. Contract-faithful API and errors | PASS | Contract in [contracts/openapi.yaml](contracts/openapi.yaml): 201/200/422, 302/404/410, analytics 404/410, `/health`, `/docs`; global filter emits `{detail}`; ValidationPipe configured for 422; 24 UTC buckets; frontend renders local time. |
-| Stack/ports/config/schema constraints | PASS | Ports 5173/8000, Vite `/api` proxy, `PUBLIC_BASE_URL`, `DATABASE_PATH`, required indexes, parameterized SQL, code-format validation before lookup. |
+| Stack/ports/config/schema constraints | PASS | Ports 9011/9010, Vite `/api` proxy, `PUBLIC_BASE_URL`, `DATABASE_PATH`, required indexes, parameterized SQL, code-format validation before lookup. |
 | Quality gates (tests, responsive UI, DoD) | PASS | Unit, integration and end-to-end layers cover NFR-01–03, TTL, expiry, statuses, and the 15-step flow (automated in Playwright, also walkable manually in [quickstart.md](quickstart.md)). |
-| Testing stack named in constitution (Jest, Supertest, Vitest) | PASS with justified addition | Playwright (+ better-sqlite3 for DB set-up in tests) is a dev-only dependency added by the owner's request for end-to-end tests; see Complexity Tracking. No runtime dependency is added. |
+| Testing stack named in constitution (Jest, Supertest, Vitest, React Testing Library, Playwright) | PASS | Constitution v1.1.0 permits the dev-only test tooling used here: React Testing Library/jsdom for frontend integration tests and a separate `e2e/` Playwright package. No runtime dependency is added. |
 
 **Post-design re-check (after Phase 1)**: PASS — no violations introduced; Complexity Tracking is empty.
 
@@ -79,7 +79,7 @@ backend/
 ├── nest-cli.json
 ├── .env.example                 # PUBLIC_BASE_URL, DATABASE_PATH
 ├── src/
-│   ├── main.ts                  # bootstrap: port 8000, ValidationPipe(422), exception filter, Swagger /docs
+│   ├── main.ts                  # bootstrap: port 9010, ValidationPipe(422), exception filter, Swagger /docs
 │   ├── app.module.ts
 │   ├── config/app-config.ts     # reads PUBLIC_BASE_URL, DATABASE_PATH (defaults per plan.md §13)
 │   ├── common/
@@ -107,7 +107,7 @@ backend/
 
 frontend/
 ├── package.json
-├── vite.config.js               # port 5173, proxy /api → http://localhost:8000
+├── vite.config.js               # port 9011, proxy /api → http://localhost:9010
 ├── index.html
 ├── src/
 │   ├── main.jsx                 # React Router setup
@@ -127,9 +127,9 @@ frontend/
 
 e2e/
 ├── package.json                 # @playwright/test, better-sqlite3 (dev-only); `npm test`
-├── playwright.config.ts         # starts backend (8000) + frontend (5173) via webServer, temp DB,
+├── playwright.config.ts         # starts backend (9010) + frontend (9011) via webServer, temp DB,
 │                                # Chromium projects: desktop 1280px, mobile 375px
-├── global-setup.ts              # deletes the throwaway e2e database before the run
+├── reset-db.js                  # deletes the throwaway e2e database; run by the backend webServer command
 ├── support/db.ts                # test-only helper: force expiry / read rows in the e2e database
 └── tests/
     ├── definition-of-done.spec.ts   # the 15-step flow from plan.md §18
@@ -155,15 +155,10 @@ tooling — the two application processes are started independently, matching th
 4. **Analytics**: single grouped query over `click_events` for the 24-hour window, zero-filled in code to exactly 24 ascending UTC buckets; read-only.
 5. **Errors**: global exception filter → `{ "detail": string }`; ValidationPipe `errorHttpStatusCode: 422`; invalid short-code format → 404 before any DB access.
 6. **Redirects** send `Cache-Control: no-store` so repeat visits always reach the server and are counted.
-7. **Test layers**: unit tests prove rules in isolation; integration tests prove the assembled service (real SQLite, real validation pipe/filter, concurrency, persistence); end-to-end tests prove the real browser experience (clipboard, local timezone, 5173-vs-8000 origins, responsive layout) and the 15-step Definition of Done. The e2e run uses its own database file and forces expiry by writing `expires_at` in that file (no product code or TTL setting for tests).
+7. **Test layers**: unit tests prove rules in isolation; integration tests prove the assembled service (real SQLite, real validation pipe/filter, concurrency, persistence); end-to-end tests prove the real browser experience (clipboard, local timezone, 9011-vs-9010 origins, responsive layout) and the 15-step Definition of Done. The e2e run uses its own database file and forces expiry by writing `expires_at` in that file (no product code or TTL setting for tests).
 8. **Frontend**: relative `/api` calls through the Vite proxy; short URL comes from the API (`PUBLIC_BASE_URL`); View Analytics uses a React Router `<Link>` (own origin); no polling, no timers.
 
 ## Complexity Tracking
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| Extra dev-only test dependency: Playwright (and better-sqlite3 inside `e2e/` to force expiry in the throwaway DB) beyond the Jest/Supertest/Vitest list in the constitution | Owner requested end-to-end tests. Clipboard, browser-local timezone, the frontend-vs-backend origin of links, and phone-width layout (SC-011) can only be verified in a real browser | jsdom-only "e2e" cannot exercise the clipboard, real timezone, real proxying or layout, leaving those requirements manual; Cypress offers no extra capability here and is heavier |
-
-Approved by the project owner when answering the clarification of 2026-10-12. Runtime stack is unchanged
-(no new production dependency, no new service). Recommended follow-up: a MINOR constitution amendment
-adding Playwright to the testing list so the stack text and plan agree.
+No constitution violations to justify. The dev-only Playwright package (`e2e/`) was approved by the project
+owner and is now permitted by constitution v1.1.0 ("Development Workflow and Quality Gates").

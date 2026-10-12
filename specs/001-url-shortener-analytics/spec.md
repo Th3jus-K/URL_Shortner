@@ -13,6 +13,8 @@
 ### Session 2026-10-12
 
 - Q: Which tool should run the end-to-end tests that drive the running app through a browser? → A: Automated real-browser testing (not jsdom-only); the specific tool and its justification are recorded in plan.md.
+- Q: What happens when a submitted URL contains whitespace or control characters inside it, or non-ASCII characters? → A: Whitespace/control characters anywhere inside the URL are rejected (422); non-ASCII characters are accepted, stored exactly as submitted, and sent percent-encoded in the redirect.
+- Q: What counts as a "valid hostname"? → A: The URL must start with `http://` or `https://` followed directly by a non-empty host that the standard URL parser accepts (`localhost` and IP addresses are valid); no further hostname rules.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -28,7 +30,7 @@ Anyone, without creating an account, opens the landing page, pastes a long web a
 
 1. **Given** the landing page is open, **When** the visitor submits a valid HTTP/HTTPS URL, **Then** a short link made of 7 letters/digits is shown together with its expiration time (24 hours from now).
 2. **Given** a short link is displayed, **When** the visitor clicks Copy, **Then** the short link is placed on the clipboard, a success notification appears, and the page does not reload.
-3. **Given** the visitor submits an empty value, a non-HTTP/HTTPS address (e.g. a `javascript:` address), an address without a valid hostname, or an address over 2048 characters, **When** the submission is made, **Then** it is rejected with a clear inline error and no short link is created.
+3. **Given** the visitor submits an empty value, a non-HTTP/HTTPS address (e.g. a `javascript:` address), an address without a valid hostname, an address containing whitespace or control characters inside it, or an address over 2048 characters, **When** the submission is made, **Then** it is rejected with a clear inline error and no short link is created.
 4. **Given** the service is unreachable, **When** the visitor submits a URL, **Then** a clear network-failure message is shown and the page remains usable.
 5. **Given** a submission is in progress, **When** the visitor waits for the result, **Then** a loading indicator is shown.
 
@@ -111,6 +113,7 @@ After a link expires it stops working permanently. If someone submits the same o
 
 - A URL with leading/trailing whitespace is trimmed before validation and comparison; no other normalization is applied.
 - A URL of exactly 2048 characters is accepted; 2049 characters is rejected.
+- A URL containing whitespace or control characters (e.g. a space or line break) anywhere inside it is rejected as invalid input; a URL containing non-ASCII characters (e.g. `http://example.com/café`) is accepted, stored exactly as submitted, and sent percent-encoded when redirecting.
 - A short code with an invalid format (wrong length or non-alphanumeric characters) is rejected as not found without touching stored data.
 - A link is considered expired at the exact moment current time equals its expiration time.
 - Two concurrent clicks on the same link must both be counted (no lost counts).
@@ -134,7 +137,7 @@ After a link expires it stops working permanently. If someone submits the same o
 
 - **FR-004**: System MUST accept a submitted URL and return a shortened URL.
 - **FR-005**: System MUST trim leading and trailing whitespace from a submitted URL before validation and comparison, and MUST NOT otherwise normalize it.
-- **FR-006**: System MUST accept only HTTP and HTTPS URLs with a valid hostname, a non-empty value, and a maximum length of 2048 characters; all others MUST be rejected with an "invalid input" (HTTP 422) response and a clear message.
+- **FR-006**: System MUST accept only HTTP and HTTPS URLs with a valid hostname (the URL starts with `http://` or `https://` directly followed by a non-empty host accepted by the standard URL parser; `localhost` and IP addresses are valid, `http:///path` and `http:example.com` are not), a non-empty value, no whitespace or control characters inside the URL (after trimming), and a maximum length of 2048 characters; all others MUST be rejected with an "invalid input" (HTTP 422) response and a clear message.
 
 **Link creation and lifecycle**
 
@@ -150,7 +153,7 @@ After a link expires it stops working permanently. If someone submits the same o
 
 **Redirect and click tracking**
 
-- **FR-016**: Opening an active short link MUST redirect the visitor (HTTP 302) to the original URL.
+- **FR-016**: Opening an active short link MUST redirect the visitor (HTTP 302) to the original URL (any non-ASCII characters sent percent-encoded).
 - **FR-017**: Opening an unknown short link MUST return HTTP 404; opening an expired one MUST return HTTP 410 with the body `{"detail": "This shortened URL has expired"}`.
 - **FR-018**: Every successful redirect MUST record exactly one click (increment the total, update the last-clicked time and store a click event); failed or expired visits MUST NOT count.
 - **FR-019**: Repeated visits MUST each count separately, and concurrent visits MUST NOT lose counts.
@@ -192,7 +195,7 @@ After a link expires it stops working permanently. If someone submits the same o
 - **SC-004**: 100% of submissions of an expired URL produce a code never issued before, with zero clicks.
 - **SC-005**: Under at least 50 simultaneous submissions of the same new URL, exactly one link is created and all requesters receive the same code.
 - **SC-006**: Under at least 100 simultaneous visits to one active link, the reported total clicks equals the number of successful redirects exactly.
-- **SC-007**: 100% of invalid inputs (empty, wrong scheme, no hostname, over 2048 characters) are rejected with a clear message and create no link.
+- **SC-007**: 100% of invalid inputs (empty, wrong scheme, no hostname, internal whitespace/control characters, over 2048 characters) are rejected with a clear message and create no link.
 - **SC-008**: An expired or unknown short link never redirects.
 - **SC-009**: The analytics view always shows exactly 24 hourly buckets, and its figures match the actual number and timing of recorded clicks.
 - **SC-010**: A tester can complete the full 15-step end-to-end flow in plan.md §18 (shorten, copy, visit, view analytics, resubmit with preserved analytics, expire, resubmit with new code) without error, and the same flow passes as an automated real-browser test.

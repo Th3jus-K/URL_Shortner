@@ -36,7 +36,7 @@ Indexes:
 
 ### Validation rules (enforced before persistence)
 
-- `original_url`: trimmed; non-empty; ≤ 2048 characters; scheme `http`/`https` with a non-empty hostname; no other normalization.
+- `original_url`: trimmed; non-empty; ≤ 2048 characters; scheme `http`/`https` directly followed by a non-empty host accepted by the standard URL parser; no whitespace or control characters inside (non-ASCII allowed, stored verbatim); no other normalization.
 - `short_code` (when read from a request path): matches `^[A-Za-z0-9]{7}$`, otherwise treated as unknown.
 
 ### State transitions

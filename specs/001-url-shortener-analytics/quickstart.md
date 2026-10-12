@@ -8,14 +8,14 @@ Schema: [data-model.md](data-model.md).
 
 - Node.js 22+ and npm
 - `curl` (and optionally `jq`)
-- Ports 5173 and 8000 free
+- Ports 9011 and 9010 free
 
 ## Setup
 
 ```bash
 # Backend
 cd backend
-cp .env.example .env        # PUBLIC_BASE_URL=http://localhost:8000, DATABASE_PATH=../data/shortener.db
+cp .env.example .env        # PUBLIC_BASE_URL=http://localhost:9010, DATABASE_PATH=../data/shortener.db
 npm install
 
 # Frontend
@@ -27,13 +27,13 @@ npm install
 
 ```bash
 # Terminal 1
-cd backend && npm run start:dev      # http://localhost:8000  (Swagger: /docs, health: /health)
+cd backend && npm run start:dev      # http://localhost:9010  (Swagger: /docs, health: /health)
 
 # Terminal 2
-cd frontend && npm run dev           # http://localhost:5173
+cd frontend && npm run dev           # http://localhost:9011
 ```
 
-Expected: `curl -s http://localhost:8000/health` returns `{"status":"ok"}`; `http://localhost:8000/docs` shows the API documentation.
+Expected: `curl -s http://localhost:9010/health` returns `{"status":"ok"}`; `http://localhost:9010/docs` shows the API documentation.
 
 ## Automated checks
 
@@ -44,12 +44,12 @@ cd backend  && npm run test:unit         # unit only
 cd backend  && npm run test:integration  # integration only (API, concurrency, persistence)
 cd frontend && npm test                  # Vitest: unit + integration (stubbed fetch)
 
-# End-to-end (starts both servers itself on 8000/5173 with a throwaway database)
+# End-to-end (starts both servers itself on 9010/9011 with a throwaway database)
 cd e2e && npm install && npx playwright install chromium   # first time only
 cd e2e && npm test
 ```
 
-Stop any running dev servers first: the e2e run needs ports 5173 and 8000 and refuses to reuse existing servers.
+Stop any running dev servers first: the e2e run needs ports 9011 and 9010 and refuses to reuse existing servers.
 
 Expected: all pass. Together the layers must cover: 201/200/422 on shorten, 302/404/410 on redirect, 404/410 on analytics, TTL renewal never shortening expiry, new code after expiry, 50 concurrent identical submissions → one code and one row, 100 concurrent visits → `total_clicks` = 100, exactly 24 buckets, persistence across restart, and the 15-step flow below in a real browser (`e2e/tests/definition-of-done.spec.ts`).
 
@@ -57,22 +57,22 @@ Expected: all pass. Together the layers must cover: 201/200/422 on shorten, 302/
 
 The same flow is automated in the e2e suite; walk it by hand once to see it for yourself.
 
-Use the browser at `http://localhost:5173` unless a `curl` is shown.
+Use the browser at `http://localhost:9011` unless a `curl` is shown.
 
 | # | Action | Expected result |
 |---|---|---|
 | 1 | Open `/` | Landing page with name, description, input, Shorten button |
 | 2 | Submit `https://example.com/article` | Loading indicator, then result |
-| 3 | Read result | Short URL `http://localhost:8000/r/<7 chars>`, "Expires in 23 hours 59 minutes"-style text, `reused` not indicated |
+| 3 | Read result | Short URL `http://localhost:9010/r/<7 chars>`, "Expires in 23 hours 59 minutes"-style text, `reused` not indicated |
 | 4 | Click **Copy Link** | Success toast; page does not reload; clipboard holds the short URL |
-| 5 | Open the short URL (e.g. `curl -sI http://localhost:8000/r/<code>`) | `302` with `Location: https://example.com/article`; repeat 3 times |
-| 6 | Click **View Analytics** | Browser goes to `http://localhost:5173/stats/<code>` (not `:8000`) |
+| 5 | Open the short URL (e.g. `curl -sI http://localhost:9010/r/<code>`) | `302` with `Location: https://example.com/article`; repeat 3 times |
+| 6 | Click **View Analytics** | Browser goes to `http://localhost:9011/stats/<code>` (not `:9010`) |
 | 7 | Read analytics | Total clicks = number of visits; created/expires/last-clicked in local time; 24 hourly bars with the current hour holding the visits |
 | 8 | Back on `/`, submit the same URL again | Result shows the **same** code, "reused" note, later expiry (HTTP 200) |
 | 9 | Compare expiry | New expiry ≈ now + 24 h; `created_at` unchanged |
 | 10 | Open analytics, press **Refresh** | Same total clicks as before the resubmission (analytics preserved) |
 | 11 | Force expiry (see below) | — |
-| 12 | `curl -si http://localhost:8000/r/<code>` | `410` with body `{"detail":"This shortened URL has expired"}`; analytics page shows the expired message; click count unchanged |
+| 12 | `curl -si http://localhost:9010/r/<code>` | `410` with body `{"detail":"This shortened URL has expired"}`; analytics page shows the expired message; click count unchanged |
 | 13 | Submit the original URL again on `/` | `201`, `reused: false` |
 | 14 | Compare codes | A **different** short code than step 3 |
 | 15 | Open analytics for the new code | Total clicks 0, last clicked empty, all 24 buckets 0; old code still returns 410 |
@@ -91,12 +91,12 @@ Expected: `{ changes: 1, ... }`.
 ## Error and edge-case spot checks
 
 ```bash
-curl -si -X POST localhost:8000/api/shorten -H 'content-type: application/json' -d '{"url":""}'                  # 422
-curl -si -X POST localhost:8000/api/shorten -H 'content-type: application/json' -d '{"url":"javascript:alert(1)"}' # 422
-curl -si -X POST localhost:8000/api/shorten -H 'content-type: application/json' -d '{"url":"ftp://example.com/x"}' # 422
-curl -si localhost:8000/r/ZZZZZZZ                  # 404 unknown code
-curl -si localhost:8000/r/bad                      # 404 malformed code
-curl -si localhost:8000/api/links/ZZZZZZZ/analytics # 404
+curl -si -X POST localhost:9010/api/shorten -H 'content-type: application/json' -d '{"url":""}'                  # 422
+curl -si -X POST localhost:9010/api/shorten -H 'content-type: application/json' -d '{"url":"javascript:alert(1)"}' # 422
+curl -si -X POST localhost:9010/api/shorten -H 'content-type: application/json' -d '{"url":"ftp://example.com/x"}' # 422
+curl -si localhost:9010/r/ZZZZZZZ                  # 404 unknown code
+curl -si localhost:9010/r/bad                      # 404 malformed code
+curl -si localhost:9010/api/links/ZZZZZZZ/analytics # 404
 ```
 
 Also verify: a URL of 2048 characters is accepted and 2049 rejected; whitespace around a URL is trimmed
@@ -107,6 +107,18 @@ restarting the backend keeps all links and counts.
 
 In browser dev tools, view `/` and `/stats/<code>` at ~375 px (phone) and ~1280 px (desktop): no horizontal
 scrolling, controls remain usable (SC-011).
+
+## Measured (2026-10-12, local, Node 26.5)
+
+`curl -w '%{time_total}'` against the running backend, 5 requests each after the first (SQLite file, WAL):
+
+| Operation | Target | Measured (first / typical) |
+|---|---|---|
+| `POST /api/shorten` (new / renewal) | < 500 ms | 33 ms / 2.5 ms |
+| `GET /r/<code>` (302 + click recorded) | < 200 ms | 5.8 ms / 2.2 ms |
+| `GET /api/links/<code>/analytics` | < 500 ms | 2.4 ms / 1.7 ms |
+
+All three are far inside the targets.
 
 ## Done when
 
